@@ -1,0 +1,15 @@
+Assume that the location of toolchain is /home/extra/arm-2009q1/bin/arm-none-linux-gnueabi-*
+
+1. Add toolchain location to $PATH, if not yet
+
+export PATH=/home/extra/arm-2009q1/bin:$PATH
+
+2. Configure the build parameter
+
+./Configure --openssldir=/usr/local/openssl linux-armv4 no-shared --cross-compile-prefix=arm-none-linux-gnueabi-
+
+	--prefix is where you want the headers & libraries to be install
+			specify this path during configuration of libesmtp
+
+3. make;make install
+

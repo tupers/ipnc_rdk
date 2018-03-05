@@ -1,0 +1,790 @@
+/** ==================================================================
+ *  @file   multich_tristream_fullFeature.c
+ *
+ *  @path    ipnc_mcfw/mcfw/src_linux/mcfw_api/usecases/
+ *
+ *  @desc   This  File contains.
+ * ===================================================================
+ *  Copyright (c) Texas Instruments Inc 2011, 2012
+ *
+ *  Use of this software is controlled by the terms and conditions found
+ *  in the license agreement under which this software has been supplied
+ * ===================================================================*/
+
+/*------------------------------ TRIPLE OUT <1080p + D1 + 1080p> ---------------------------
+
+                SENSOR
+          ________||_______
+          |                |
+          |   CAMERA LINK  |
+          |____(VPSS M3)___|         
+                  |                 	  
+                  |                 
+                 RSZA             
+            (1920x1080)    
+           (420SP/422I)     
+                   |                
+                   |                                
+                   |              
+ 	     ISS_NF(VPSSME)                           
+ 		   |                              		        
+		   |                                                     
+	    IPC FRAMES OUT(VPSSM3)
+		   |
+		   |
+	    IPC FRAMES IN(DSP)
+		   |
+		   |
+	    IPC FRAMES OUT(DSP)
+		   |
+		   |
+	    IPC FRAMES IN(VPSSM3)
+		   |
+		   |
+	     DUP_MJPEG(VPSSM3)                             	
+   		   |   				                                     
+ 		   |                                                                         
+   	     MUX(VPSSM3)                                                                      
+   		   |                                                    
+                   |
+             IPC OUT(VPSSM3)
+                   |
+                   |
+             IPC IN(VIDEOM3)
+                   |
+                   |
+              ENC(VIDEOM3)
+                   |
+                   |
+           IPC BITS OUT(VIDEOM3)
+                   |
+                   |
+             IPC BITS IN(A8)
+                   |
+                   |
+             *************
+             * STREAMING *
+             *************
+------------------------------------------------------------------------------------------*/
+
+#include "mcfw/src_linux/mcfw_api/usecases/multich_common.h"
+#include "mcfw/src_linux/mcfw_api/usecases/multich_ipcbits.h"
+#include "demos/mcfw_api_demos/multich_usecase/ti_mcfw_ipnc_main.h"
+
+#ifdef IPNC_DSP_ON
+    #define VA_ON_DSP
+#endif
+
+#define VS_W    1600
+#define VS_H    900
+
+#define IPC_FRAMEIN_HOST		1
+
+UInt32 gNoiseFilterMode;
+
+/* =============================================================================
+ * Externs
+ * ============================================================================= */
+extern UInt32 gIsGlbceInitDone;
+extern GlbcePreset gGLBCE_AlgoPreset;
+
+/* =============================================================================
+ * Use case code
+ * ============================================================================= */
+static SystemVideo_Ivahd2ChMap_Tbl systemVid_encDecIvaChMapTbl = {
+    .isPopulated = 1,
+    .ivaMap[0] = {
+                  .EncNumCh = 2,
+                  .EncChList = {0, 1},
+                  .DecNumCh = 2,
+                  .DecChList = {0, 1},
+                  },
+
+};
+
+/* Dup Links */
+#define NUM_DUP_LINK                    (1)
+#define MJPEG_DUP_LINK_IDX              (0)
+
+/* ===================================================================
+ *  @func     MultiCh_createTriStreamFullFtr
+ *
+ *  @desc     Function does the following
+ *
+ *  @modif    This function modifies the following structures
+ *
+ *  @inputs   This function takes the following inputs
+ *            <argument name>
+ *            Description of usage
+ *            <argument name>
+ *            Description of usage
+ *
+ *  @outputs  <argument name>
+ *            Description of usage
+ *
+ *  @return   Return value of this function if any
+ *  ==================================================================
+ */
+Void MultiCh_createMachVision()
+{
+    UInt32 i;
+    CameraLink_CreateParams cameraPrm;
+    VnfLink_CreateParams vnfPrm;
+    DupLink_CreateParams dupPrm[NUM_DUP_LINK];
+    MuxLink_CreateParams muxPrm;
+    IpcFramesOutLinkRTOS_CreateParams ipcFramesOutVpssPrm;
+    IpcFramesInLinkRTOS_CreateParams ipcFramesInDspPrm;
+    ImgLink_CreateParams	imgPrm;
+    IpcFramesOutLinkRTOS_CreateParams ipcFramesOutDspPrm;
+    
+    IpcFramesInLinkHLOS_CreateParams   ipcFramesInHostPrm;
+    FrameProcessHostLink_CreateParams  frameProcessPrm;
+    IpcFramesOutLinkHLOS_CreateParams  ipcFramesOutHostPrm;
+    
+    IpcFramesInLinkRTOS_CreateParams ipcFramesInVpssPrm;
+    IpcLink_CreateParams ipcOutVpssPrm;
+    IpcLink_CreateParams ipcInVideoPrm;
+    EncLink_CreateParams encPrm;
+    IpcBitsOutLinkRTOS_CreateParams ipcBitsOutVideoPrm;
+    IpcBitsInLinkHLOS_CreateParams ipcBitsInHostPrm0;
+    VstabLink_CreateParams vstabPrm;
+    
+    CameraLink_VipInstParams *pCameraInstPrm;
+    CameraLink_OutParams *pCameraOutPrm;
+
+    UInt32 ipcOutVpssId;
+    UInt32 ipcInVideoId;
+    UInt32 dupId[NUM_DUP_LINK];
+    UInt32 vstabId;
+    UInt32 ipcFramesOutVpssId;
+    UInt32 ipcFramesInDspId;
+    UInt32 imgId;
+    UInt32 ipcFramesOutDspId; 
+    UInt32 ipcFramesInVpssId;
+	UInt32 frameProcessId;
+	
+    /* IPC struct init */
+    MULTICH_INIT_STRUCT(IpcLink_CreateParams, ipcOutVpssPrm);
+    MULTICH_INIT_STRUCT(IpcLink_CreateParams, ipcInVideoPrm);
+    MULTICH_INIT_STRUCT(IpcBitsOutLinkRTOS_CreateParams, ipcBitsOutVideoPrm);
+    MULTICH_INIT_STRUCT(IpcBitsInLinkHLOS_CreateParams, ipcBitsInHostPrm0);
+    MULTICH_INIT_STRUCT(IpcFramesOutLinkRTOS_CreateParams, ipcFramesOutVpssPrm);
+    MULTICH_INIT_STRUCT(IpcFramesInLinkRTOS_CreateParams, ipcFramesInDspPrm);
+    MULTICH_INIT_STRUCT(IpcFramesOutLinkRTOS_CreateParams,ipcFramesOutDspPrm);
+    MULTICH_INIT_STRUCT(IpcFramesInLinkHLOS_CreateParams  ,ipcFramesInHostPrm);
+    MULTICH_INIT_STRUCT(IpcFramesOutLinkHLOS_CreateParams ,ipcFramesOutHostPrm);
+    
+    MULTICH_INIT_STRUCT(IpcFramesInLinkRTOS_CreateParams,ipcFramesInVpssPrm);
+
+    MULTICH_INIT_STRUCT(MuxLink_CreateParams, muxPrm);
+
+    MultiCh_detectBoard();
+
+    System_linkControl(SYSTEM_LINK_ID_M3VPSS,
+                       SYSTEM_M3VPSS_CMD_RESET_VIDEO_DEVICES, NULL, 0, TRUE);
+
+    System_linkControl(SYSTEM_LINK_ID_M3VIDEO,
+                       SYSTEM_COMMON_CMD_SET_CH2IVAHD_MAP_TBL,
+                       &systemVid_encDecIvaChMapTbl,
+                       sizeof(SystemVideo_Ivahd2ChMap_Tbl), TRUE);
+
+    /* Link IDs */
+    gVcamModuleContext.cameraId = SYSTEM_LINK_ID_CAMERA;
+    gVencModuleContext.encId = SYSTEM_LINK_ID_VENC_0;
+    gMjpegModuleContext.mjpepEncId = SYSTEM_LINK_ID_MJPEG;
+    gVsysModuleContext.muxId = SYSTEM_VPSS_LINK_ID_MUX_0;
+    dupId[MJPEG_DUP_LINK_IDX] = SYSTEM_VPSS_LINK_ID_DUP_1;
+    gVcamModuleContext.ispId = SYSTEM_LINK_ID_ISP_0;
+    vstabId = SYSTEM_LINK_ID_VSTAB_0;
+    
+    ipcOutVpssId = SYSTEM_VPSS_LINK_ID_IPC_OUT_M3_0;
+    ipcInVideoId = SYSTEM_VIDEO_LINK_ID_IPC_IN_M3_0;
+    gVencModuleContext.ipcBitsOutRTOSId = SYSTEM_VIDEO_LINK_ID_IPC_BITS_OUT_0;
+    gVencModuleContext.ipcBitsInHLOSId = SYSTEM_HOST_LINK_ID_IPC_BITS_IN_0;
+    ipcFramesOutVpssId = SYSTEM_VPSS_LINK_ID_IPC_FRAMES_OUT_0;
+    ipcFramesInDspId   = SYSTEM_DSP_LINK_ID_IPC_FRAMES_IN_0;
+    imgId = SYSTEM_DSP_LINK_ID_IMG;
+    ipcFramesOutDspId = SYSTEM_DSP_LINK_ID_IPC_FRAMES_OUT_0;
+	frameProcessId = SYSTEM_HOST_LINK_ID_FRAMEPROCESS;
+
+    gVcamModuleContext.ipcFramesInHostId         = SYSTEM_HOST_LINK_ID_IPC_FRAMES_IN_0;
+    gVdisModuleContext.ipcFramesOutHostId        = SYSTEM_HOST_LINK_ID_IPC_FRAMES_OUT_0;
+
+    
+    ipcFramesInVpssId = SYSTEM_VPSS_LINK_ID_IPC_FRAMES_IN_0;
+
+    {
+
+        gVcamModuleContext.glbceId = SYSTEM_LINK_ID_INVALID;
+        /* Camera Link params */
+        CameraLink_CreateParams_Init(&cameraPrm);
+
+        gVcamModuleContext.vnfId = SYSTEM_LINK_ID_VNF;
+        if (gUI_mcfw_config.noisefilterMode != DSS_VNF_ON)
+        {
+            cameraPrm.vnfLinkId = SYSTEM_LINK_ID_VNF;
+        }
+
+        cameraPrm.captureMode = CAMERA_LINK_CAPMODE_ISIF;
+		cameraPrm.outQueParams[0].nextLink = gVcamModuleContext.vnfId;
+		cameraPrm.outQueParams[1].nextLink = gVsysModuleContext.muxId;;
+
+        /* This is for TVP5158 Audio Channels - Change it to 16 if there are 16
+         * audio channels connected in cascade */
+        cameraPrm.numAudioChannels = 1;
+        cameraPrm.numVipInst = 1;
+
+        cameraPrm.tilerEnable = FALSE;
+
+        cameraPrm.vsEnable = gUI_mcfw_config.vsEnable;
+        cameraPrm.vstabLinkId = vstabId;
+
+        pCameraInstPrm = &cameraPrm.vipInst[0];
+        pCameraInstPrm->vipInstId = SYSTEM_CAMERA_INST_VP_CSI2;
+        pCameraInstPrm->videoDecoderId = MultiCh_getSensorId(gUI_mcfw_config.sensorId);
+        pCameraInstPrm->inDataFormat = SYSTEM_DF_YUV420SP_UV;
+
+#ifdef IMGS_OMNIVISION_OV10630
+        pCameraInstPrm->sensorOutWidth  = 1280;
+        pCameraInstPrm->sensorOutHeight = 720;
+#elif defined IMGS_SONY_IMX104
+        pCameraInstPrm->sensorOutWidth  = 1280;
+        pCameraInstPrm->sensorOutHeight = 720;
+#elif defined IMGS_MICRON_MT9M034
+        pCameraInstPrm->sensorOutWidth  = 1280;
+        pCameraInstPrm->sensorOutHeight = 720;
+#else
+        pCameraInstPrm->sensorOutWidth  = 1920;
+        pCameraInstPrm->sensorOutHeight = 1080;
+#endif
+
+        if (gUI_mcfw_config.noisefilterMode == DSS_VNF_ON)
+        {
+            pCameraInstPrm->standard = SYSTEM_STD_720P_60;
+        }
+        else
+        {
+            pCameraInstPrm->standard = SYSTEM_STD_720P_50;
+            cameraPrm.issVnfEnable = 1;
+        }
+
+	pCameraInstPrm->numOutput = 2;
+	/* First stream */
+	pCameraOutPrm = &pCameraInstPrm->outParams[0];
+
+	if (gUI_mcfw_config.noisefilterMode == DSS_VNF_ON)
+	{
+		pCameraOutPrm->dataFormat = SYSTEM_DF_YUV422I_UYVY;
+	}
+	else
+	{
+		pCameraOutPrm->dataFormat = SYSTEM_DF_YUV420SP_UV;
+	}
+
+	pCameraOutPrm->scEnable = FALSE;
+
+#ifdef IMGS_OMNIVISION_OV10630
+	pCameraOutPrm->scOutWidth = 1280;
+	pCameraOutPrm->scOutHeight = 720;
+#elif defined IMGS_SONY_IMX104
+	pCameraOutPrm->scOutWidth = 1280;
+	pCameraOutPrm->scOutHeight = 720;
+#elif defined IMGS_MICRON_MT9M034
+	pCameraOutPrm->scOutWidth = 1280;
+	pCameraOutPrm->scOutHeight = 720;
+#else
+	pCameraOutPrm->scOutWidth = 1920;
+	pCameraOutPrm->scOutHeight = 1080;
+#endif
+
+	pCameraOutPrm->outQueId = 0;
+	/* Second stream */
+	pCameraOutPrm = &pCameraInstPrm->outParams[1];
+	pCameraOutPrm->dataFormat = SYSTEM_DF_YUV420SP_UV;
+	pCameraOutPrm->scEnable = FALSE;
+	pCameraOutPrm->scOutWidth = 720;
+	pCameraOutPrm->scOutHeight = 480;
+	pCameraOutPrm->standard = SYSTEM_STD_NTSC;
+	pCameraOutPrm->outQueId = 1;
+
+        /* 2A config */
+        cameraPrm.t2aConfig.n2A_vendor = gUI_mcfw_config.n2A_vendor;
+        cameraPrm.t2aConfig.n2A_mode = gUI_mcfw_config.n2A_mode;
+    }
+
+    /* vstab Link params */
+    vstabPrm.totalFrameWidth  = pCameraInstPrm->sensorOutWidth;
+    vstabPrm.totalFrameHeight = pCameraInstPrm->sensorOutHeight;
+
+    cameraPrm.vnfFullResolution = FALSE;
+
+    /* VNF link params */
+    VnfLink_ChCreateParams *vnfParams;
+
+    VnfLink_CreateParams_Init(&vnfPrm);
+
+    /* Vnf Link Params */
+    vnfPrm.inQueParams.prevLinkId = gVcamModuleContext.cameraId;
+    vnfPrm.inQueParams.prevLinkQueId = 0;
+
+    vnfPrm.outQueParams.nextLink = ipcFramesOutVpssId;
+
+    vnfParams = &vnfPrm.chCreateParams[0];
+    vnfParams->sParams.eOutputFormat = SYSTEM_DF_YUV420SP_UV;
+    if (gUI_mcfw_config.ldcEnable)
+    {
+        vnfParams->sParams.eOperateMode = VNF_LINK_LDC_AFFINE_NSF_TNF;
+    }
+    else
+    {
+#ifdef USE_TNF2_FILTER
+        vnfParams->sParams.eOperateMode =  VNF_LINK_3DNF;
+#elif defined (USE_TNF3_FILTER)
+        vnfParams->sParams.eOperateMode =  VNF_LINK_TNF3;
+#else
+        vnfParams->sParams.eOperateMode = VNF_LINK_AFFINE_NSF_TNF;
+#endif
+        vnfParams->sParams.eNsfSet = VNF_LINK_NSF_LUMA_CHROMA;
+    }
+
+    if (gUI_mcfw_config.noisefilterMode != DSS_VNF_ON)
+    {
+        if (((vnfParams->sParams.eOperateMode == VNF_LINK_TNF3) && (vnfParams->sParams.eNsfSet == VNF_LINK_NSF_LUMA_CHROMA)) ||
+            (vnfParams->sParams.eOperateMode == VNF_LINK_NSF2) || (vnfParams->sParams.eOperateMode == VNF_LINK_LDC_AFFINE_NSF_TNF))
+        {
+             cameraPrm.vnfFullResolution = TRUE;
+        }
+    }
+
+    vnfParams->dParams.ldcParams.eInterpolationLuma = VNF_LINK_YINTERPOLATION_BILINEAR;
+    vnfParams->dParams.ldcParams.unPixelPad = 4;
+
+    vnfParams->dParams.nsfParams.bLumaEn = TRUE;
+    vnfParams->dParams.nsfParams.bChromaEn = TRUE;
+    vnfParams->dParams.nsfParams.eSmoothVal = VNF_LINK_SMOOTH_2;
+    vnfParams->dParams.nsfParams.bSmoothLumaEn = TRUE;
+    vnfParams->dParams.nsfParams.bSmoothChromaEn = FALSE;
+
+    vnfParams->dParams.tnfParams.useDefault = TRUE;
+
+    vnfParams->dParams.nsfFilter.eFilterParam = VNF_LINK_PARAM_DEFAULT;
+    vnfParams->dParams.nsfEdge.eEdgeParam = VNF_LINK_PARAM_DISABLE;
+    vnfParams->dParams.nsfShading.eShdParam = VNF_LINK_PARAM_DISABLE;
+    vnfParams->dParams.nsfDesaturation.eDesatParam = VNF_LINK_PARAM_DISABLE;
+
+    vnfPrm.chCreateParams[0].bSnfEnable = gUI_mcfw_config.snfEnable;
+    vnfPrm.chCreateParams[0].bTnfEnable = gUI_mcfw_config.tnfEnable;
+    vnfPrm.chCreateParams[0].strength   = gUI_mcfw_config.vnfStrength;
+
+    /* Channel enable/disable */
+    if (gUI_mcfw_config.noisefilterMode == DSS_VNF_ON)
+    {
+        vnfPrm.enable[0] = 0;
+    }
+
+    vnfPrm.tilerEnable = FALSE;
+
+
+    /* IPC Frames Out VPSS for dsp link params */
+    ipcFramesOutVpssPrm.baseCreateParams.inQueParams.prevLinkId = gVcamModuleContext.vnfId;
+    ipcFramesOutVpssPrm.baseCreateParams.inQueParams.prevLinkQueId = 0; 
+    ipcFramesOutVpssPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesOutVpssPrm.baseCreateParams.inputFrameRate = 30;
+    ipcFramesOutVpssPrm.baseCreateParams.outputFrameRate = 30;
+
+    ipcFramesOutVpssPrm.baseCreateParams.numOutQue = 1; 
+    ipcFramesOutVpssPrm.baseCreateParams.outQueParams[0].nextLink = ipcFramesInDspId;
+    ipcFramesOutVpssPrm.baseCreateParams.notifyNextLink = TRUE;
+
+    ipcFramesOutVpssPrm.baseCreateParams.processLink = SYSTEM_LINK_ID_INVALID;
+    ipcFramesOutVpssPrm.baseCreateParams.notifyProcessLink = FALSE;
+    ipcFramesOutVpssPrm.baseCreateParams.noNotifyMode = FALSE;
+
+
+    /* IPC Frames in DSP for dsp link params */
+    ipcFramesInDspPrm.baseCreateParams.inQueParams.prevLinkId = ipcFramesOutVpssId;
+    ipcFramesInDspPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcFramesInDspPrm.baseCreateParams.numOutQue   = 1;
+    ipcFramesInDspPrm.baseCreateParams.outQueParams[0].nextLink = imgId;
+    ipcFramesInDspPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesInDspPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesInDspPrm.baseCreateParams.noNotifyMode   = FALSE;
+
+    gVsysModuleContext.dspImgId = imgId;
+     /* img link params */
+    imgPrm.inQueParams.prevLinkId = ipcFramesInDspId;
+    imgPrm.inQueParams.prevLinkQueId = 0;
+    imgPrm.outQueParams.nextLink = ipcFramesOutDspId;
+
+frameProcessPrm = frameProcessPrm;    
+#if IPC_FRAMEIN_HOST
+    /* DSP IPC FRAMES OUT */
+    ipcFramesOutDspPrm.baseCreateParams.inQueParams.prevLinkId = imgId;
+    ipcFramesOutDspPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcFramesOutDspPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesOutDspPrm.baseCreateParams.inputFrameRate = 30;
+    ipcFramesOutDspPrm.baseCreateParams.outputFrameRate = 30;
+    ipcFramesOutDspPrm.baseCreateParams.numOutQue = 1;
+    ipcFramesOutDspPrm.baseCreateParams.outQueParams[0].nextLink = gVcamModuleContext.ipcFramesInHostId;
+    ipcFramesOutDspPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesOutDspPrm.baseCreateParams.processLink = SYSTEM_LINK_ID_INVALID;
+    ipcFramesOutDspPrm.baseCreateParams.noNotifyMode = FALSE;
+
+
+	/* HOST A8 IPC FRAMES IN */
+    ipcFramesInHostPrm.baseCreateParams.noNotifyMode = FALSE;
+    ipcFramesInHostPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesInHostPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesInHostPrm.baseCreateParams.inQueParams.prevLinkId = ipcFramesOutDspId;
+    ipcFramesInHostPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+ 	ipcFramesInHostPrm.baseCreateParams.outQueParams[0].nextLink =  frameProcessId;  
+    ipcFramesInHostPrm.exportOnlyPhyAddr = TRUE;
+    ipcFramesInHostPrm.cbCtx = &gVcamModuleContext;
+    ipcFramesInHostPrm.cbFxn = Vcam_ipcFramesInCbFxn;
+
+    /*HOST FRAME PROCESS */
+    frameProcessPrm.inQueParams.prevLinkQueId = 0;
+    frameProcessPrm.inQueParams.prevLinkId = gVcamModuleContext.ipcFramesInHostId;
+	frameProcessPrm.outQueParams.nextLink = gVdisModuleContext.ipcFramesOutHostId;
+
+    
+	/* HOST A8 IPC FRAMES OUT */
+    ipcFramesOutHostPrm.baseCreateParams.noNotifyMode = FALSE;
+    ipcFramesOutHostPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesOutHostPrm.baseCreateParams.notifyPrevLink = FALSE;
+	ipcFramesOutHostPrm.baseCreateParams.inQueParams.prevLinkId = frameProcessId;  
+    ipcFramesOutHostPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcFramesOutHostPrm.baseCreateParams.outQueParams[0].nextLink = ipcFramesInVpssId;
+#else
+ipcFramesInHostPrm = ipcFramesInHostPrm;
+ipcFramesOutHostPrm = ipcFramesOutHostPrm;
+
+    /* DSP IPC FRAMES OUT */
+    ipcFramesOutDspPrm.baseCreateParams.inQueParams.prevLinkId = imgId;
+    ipcFramesOutDspPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcFramesOutDspPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesOutDspPrm.baseCreateParams.inputFrameRate = 30;
+    ipcFramesOutDspPrm.baseCreateParams.outputFrameRate = 30;
+    ipcFramesOutDspPrm.baseCreateParams.numOutQue = 1;
+    ipcFramesOutDspPrm.baseCreateParams.outQueParams[0].nextLink = ipcFramesInVpssId;
+    ipcFramesOutDspPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesOutDspPrm.baseCreateParams.processLink = SYSTEM_LINK_ID_INVALID;
+    ipcFramesOutDspPrm.baseCreateParams.notifyProcessLink = FALSE;
+    ipcFramesOutDspPrm.baseCreateParams.noNotifyMode = FALSE;
+#endif
+#if IPC_FRAMEIN_HOST
+    /* VPSS IPC FRAMES IN */
+    ipcFramesInVpssPrm.baseCreateParams.inQueParams.prevLinkId = gVdisModuleContext.ipcFramesOutHostId;
+    ipcFramesInVpssPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcFramesInVpssPrm.baseCreateParams.numOutQue = 1;
+    ipcFramesInVpssPrm.baseCreateParams.outQueParams[0].nextLink = dupId[MJPEG_DUP_LINK_IDX];
+    ipcFramesInVpssPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesInVpssPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesInVpssPrm.baseCreateParams.noNotifyMode = FALSE;
+#else
+    /* VPSS IPC FRAMES IN */
+    ipcFramesInVpssPrm.baseCreateParams.inQueParams.prevLinkId = ipcFramesOutDspId;
+    ipcFramesInVpssPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcFramesInVpssPrm.baseCreateParams.numOutQue = 1;
+    ipcFramesInVpssPrm.baseCreateParams.outQueParams[0].nextLink = dupId[MJPEG_DUP_LINK_IDX];
+    ipcFramesInVpssPrm.baseCreateParams.notifyPrevLink = TRUE;
+    ipcFramesInVpssPrm.baseCreateParams.notifyNextLink = TRUE;
+    ipcFramesInVpssPrm.baseCreateParams.noNotifyMode = FALSE;
+#endif    
+    /******dup jpeg *********/
+    dupPrm[MJPEG_DUP_LINK_IDX].inQueParams.prevLinkId = ipcFramesInVpssId;
+    
+    dupPrm[MJPEG_DUP_LINK_IDX].inQueParams.prevLinkQueId = 0;
+    dupPrm[MJPEG_DUP_LINK_IDX].numOutQue = 2;
+
+    dupPrm[MJPEG_DUP_LINK_IDX].outQueParams[0].nextLink =
+                                                    gVsysModuleContext.muxId;
+    dupPrm[MJPEG_DUP_LINK_IDX].outQueParams[1].nextLink =
+                                                    gVsysModuleContext.muxId;
+    dupPrm[MJPEG_DUP_LINK_IDX].notifyNextLink = TRUE;
+
+    /******************mux ******************/
+    muxPrm.numInQue = 3;
+    muxPrm.inQueParams[0].prevLinkId = dupId[MJPEG_DUP_LINK_IDX];
+    muxPrm.inQueParams[0].prevLinkQueId = 0;
+
+    /* Dup link for Scaler params */
+    muxPrm.inQueParams[1].prevLinkId = gVcamModuleContext.cameraId;
+    muxPrm.inQueParams[1].prevLinkQueId = 1;
+
+    muxPrm.inQueParams[2].prevLinkId = dupId[MJPEG_DUP_LINK_IDX];
+    muxPrm.inQueParams[2].prevLinkQueId = 1;
+
+    muxPrm.outQueParams.nextLink = ipcOutVpssId;
+
+    muxPrm.muxNumOutChan = 3;
+    muxPrm.outChMap[0].inQueId = 0;
+    muxPrm.outChMap[0].inChNum = 0;
+
+    muxPrm.outChMap[1].inQueId = 1;
+    muxPrm.outChMap[1].inChNum = 0;
+    
+    muxPrm.outChMap[2].inQueId = 2;
+    muxPrm.outChMap[2].inChNum = 0;
+
+    /* IPC Out VPSS link params */
+    ipcOutVpssPrm.inQueParams.prevLinkId = gVsysModuleContext.muxId;
+    ipcOutVpssPrm.inQueParams.prevLinkQueId = 0;
+    ipcOutVpssPrm.numOutQue = 1;
+    ipcOutVpssPrm.outQueParams[0].nextLink = ipcInVideoId;
+    ipcOutVpssPrm.notifyNextLink = TRUE;
+    ipcOutVpssPrm.notifyPrevLink = TRUE;
+    ipcOutVpssPrm.noNotifyMode = FALSE;
+
+    /* IPC In VIDEO params */
+    ipcInVideoPrm.inQueParams.prevLinkId = ipcOutVpssId;
+    ipcInVideoPrm.inQueParams.prevLinkQueId = 0;
+    ipcInVideoPrm.numOutQue = 1;
+    ipcInVideoPrm.outQueParams[0].nextLink = gVencModuleContext.encId;
+    ipcInVideoPrm.notifyNextLink = TRUE;
+    ipcInVideoPrm.notifyPrevLink = TRUE;
+    ipcInVideoPrm.noNotifyMode = FALSE;
+
+    /* Video Encoder Link params */
+    MULTICH_INIT_STRUCT(EncLink_CreateParams, encPrm);
+    {
+        EncLink_ChCreateParams *pLinkChPrm;
+        EncLink_ChDynamicParams *pLinkDynPrm;
+        VENC_CHN_DYNAMIC_PARAM_S *pDynPrm;
+        VENC_CHN_PARAMS_S *pChPrm;
+
+        for (i = 0; i < VENC_PRIMARY_CHANNELS; i++)
+        {
+            pLinkChPrm  = &encPrm.chCreateParams[i];
+            pLinkDynPrm = &pLinkChPrm->defaultDynamicParams;
+
+            pChPrm      = &gVencModuleContext.vencConfig.encChannelParams[i];
+            pDynPrm     = &pChPrm->dynamicParam;
+
+            switch(gUI_mcfw_config.demoCfg.codec_combo) {
+                case 0: pLinkChPrm->format = IVIDEO_H264HP; break; //"SINGLE_H264"
+                case 1: pLinkChPrm->format = IVIDEO_MPEG4SP; break; //"SINGLE_MPEG4"
+                case 2: pLinkChPrm->format = IVIDEO_MJPEG; break; //"SINGLE_JPEG"
+                case 3: pLinkChPrm->format = (i==0)? IVIDEO_H264HP:IVIDEO_MJPEG; break; //"H264_JPEG"
+                case 4: pLinkChPrm->format = (i==0)? IVIDEO_MPEG4SP:IVIDEO_MJPEG; break; //"MPEG4_JPEG"
+                case 5: pLinkChPrm->format = (i==0)? IVIDEO_H264HP:IVIDEO_H264HP; break; //"DUAL_H264"
+                case 6: pLinkChPrm->format = (i==0)? IVIDEO_MPEG4SP:IVIDEO_MPEG4SP; break; //"DUAL_MPEG4"
+                case 7: pLinkChPrm->format = (i==0)? IVIDEO_H264HP:IVIDEO_MPEG4SP; break;  //"H264_MPEG4"
+                case 8: pLinkChPrm->format = (i==0)? IVIDEO_H264HP:IVIDEO_H264HP; break;  //"TRIPLE_H264"
+                case 9: pLinkChPrm->format = (i==0)? IVIDEO_MPEG4SP:IVIDEO_MPEG4SP; break; //"TRIPLE_MPEG4"
+                default: pLinkChPrm->format = IVIDEO_H264HP;
+            }
+
+            pLinkChPrm->profile                 = gVencModuleContext.vencConfig.h264Profile[i];
+            pLinkChPrm->dataLayout              = IVIDEO_PROGRESSIVE;
+            pLinkChPrm->fieldMergeEncodeEnable  = FALSE;
+            pLinkChPrm->enableAnalyticinfo      = pChPrm->enableAnalyticinfo;
+            pLinkChPrm->maxBitRate              = pChPrm->maxBitRate;
+            pLinkChPrm->encodingPreset          = pChPrm->encodingPreset;
+            pLinkChPrm->rateControlPreset       = IVIDEO_USER_DEFINED; //pChPrm->rcType;
+            pLinkChPrm->enableHighSpeed         = FALSE;
+            pLinkChPrm->enableWaterMarking      = pChPrm->enableWaterMarking;
+            pLinkChPrm->StreamPreset            = gUI_mcfw_config.StreamPreset[i];
+
+            pLinkDynPrm->intraFrameInterval     = pDynPrm->intraFrameInterval;
+            pLinkDynPrm->targetBitRate          = pDynPrm->targetBitRate;
+            pLinkDynPrm->interFrameInterval     = 1;
+            pLinkDynPrm->mvAccuracy             = IVIDENC2_MOTIONVECTOR_QUARTERPEL;
+            pLinkDynPrm->inputFrameRate         = pDynPrm->inputFrameRate;
+            pLinkDynPrm->rcAlg                  = pDynPrm->rcAlg;
+            pLinkDynPrm->qpMin                  = pDynPrm->qpMin;
+            pLinkDynPrm->qpMax                  = pDynPrm->qpMax;
+            pLinkDynPrm->qpInit                 = pDynPrm->qpInit;
+            pLinkDynPrm->vbrDuration            = pDynPrm->vbrDuration;
+            pLinkDynPrm->vbrSensitivity         = pDynPrm->vbrSensitivity;
+
+            encPrm.numBufPerCh[i] = 4;
+            gVencModuleContext.encFormat[i] = pLinkChPrm->format;
+        }
+    }
+
+    /* Video Encoder Framerate */
+#ifdef IMGS_OMNIVISION_OV10630
+    encPrm.chCreateParams[0].defaultDynamicParams.inputFrameRate = 30;  // ENC_LINK_DEFAULT_ALGPARAMS_INPUTFRAMERATE;
+#elif defined IMGS_SONY_IMX104
+    encPrm.chCreateParams[0].defaultDynamicParams.inputFrameRate = 30;  // ENC_LINK_DEFAULT_ALGPARAMS_INPUTFRAMERATE;
+#elif defined IMGS_MICRON_MT9M034
+    encPrm.chCreateParams[0].defaultDynamicParams.inputFrameRate = 30;  //
+#else
+    encPrm.chCreateParams[0].defaultDynamicParams.inputFrameRate = 60;  // ENC_LINK_DEFAULT_ALGPARAMS_INPUTFRAMERATE;
+#endif
+    encPrm.chCreateParams[1].defaultDynamicParams.inputFrameRate = 30;  // ENC_LINK_DEFAULT_ALGPARAMS_INPUTFRAMERATE;
+
+    encPrm.vsEnable = gUI_mcfw_config.vsEnable;
+
+    for (i = VENC_PRIMARY_CHANNELS; i < (VENC_CHN_MAX - 1); i++)
+    {
+        encPrm.chCreateParams[i].format = IVIDEO_MJPEG;
+        encPrm.chCreateParams[i].profile = 0;
+        encPrm.chCreateParams[i].dataLayout = IVIDEO_PROGRESSIVE;
+        encPrm.chCreateParams[i].fieldMergeEncodeEnable = FALSE;
+        encPrm.chCreateParams[i].defaultDynamicParams.intraFrameInterval = 0;
+        encPrm.chCreateParams[i].encodingPreset = 0;
+        encPrm.chCreateParams[i].enableAnalyticinfo = 0;
+        encPrm.chCreateParams[i].enableWaterMarking = 0;
+        encPrm.chCreateParams[i].defaultDynamicParams.inputFrameRate = 60;
+        encPrm.chCreateParams[i].rateControlPreset = 0;
+        encPrm.chCreateParams[i].defaultDynamicParams.targetBitRate =
+            100 * 1000;
+        encPrm.chCreateParams[i].defaultDynamicParams.interFrameInterval = 0;
+        encPrm.chCreateParams[i].defaultDynamicParams.mvAccuracy = 0;
+
+        gVencModuleContext.encFormat[i] = encPrm.chCreateParams[i].format;
+    }
+    encPrm.inQueParams.prevLinkId = ipcInVideoId;
+    encPrm.inQueParams.prevLinkQueId = 0;
+    encPrm.outQueParams.nextLink = gVencModuleContext.ipcBitsOutRTOSId;
+
+    /* IPC Bits Out VIDEO Link params */
+    ipcBitsOutVideoPrm.baseCreateParams.inQueParams.prevLinkId =
+        gVencModuleContext.encId;
+    ipcBitsOutVideoPrm.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    ipcBitsOutVideoPrm.baseCreateParams.numOutQue = 1;
+    ipcBitsOutVideoPrm.baseCreateParams.outQueParams[0].nextLink =
+        gVencModuleContext.ipcBitsInHLOSId;
+    MultiCh_ipcBitsInitCreateParams_BitsOutRTOS(&ipcBitsOutVideoPrm, TRUE);
+
+    /* IPC Bits In HOST Link params */
+    ipcBitsInHostPrm0.baseCreateParams.inQueParams.prevLinkId =
+        gVencModuleContext.ipcBitsOutRTOSId;
+    ipcBitsInHostPrm0.baseCreateParams.inQueParams.prevLinkQueId = 0;
+    MultiCh_ipcBitsInitCreateParams_BitsInHLOS(&ipcBitsInHostPrm0);
+
+    /* Links Creation */
+    /* Camera Link */
+    System_linkCreate(gVcamModuleContext.cameraId, &cameraPrm,
+                      sizeof(cameraPrm));
+    System_linkControl(gVcamModuleContext.cameraId,
+                       CAMERA_LINK_CMD_DETECT_VIDEO, NULL, 0, TRUE);
+
+    System_linkCreate(gVcamModuleContext.vnfId,&vnfPrm,sizeof(vnfPrm));
+
+    System_linkCreate(ipcFramesOutVpssId,&ipcFramesOutVpssPrm,sizeof(IpcFramesOutLinkRTOS_CreateParams));
+    System_linkCreate(ipcFramesInDspId,&ipcFramesInDspPrm,sizeof(IpcFramesInLinkRTOS_CreateParams)); 
+    System_linkCreate(imgId,&imgPrm,sizeof(imgPrm));   
+    System_linkCreate(ipcFramesOutDspId,&ipcFramesOutDspPrm,sizeof(IpcFramesOutLinkRTOS_CreateParams));
+#if IPC_FRAMEIN_HOST    
+	System_linkCreate(gVcamModuleContext.ipcFramesInHostId,&ipcFramesInHostPrm,sizeof(IpcFramesOutLinkRTOS_CreateParams));
+	System_linkCreate(frameProcessId,&frameProcessPrm,sizeof(FrameProcessHostLink_CreateParams));
+	System_linkCreate(gVdisModuleContext.ipcFramesOutHostId,&ipcFramesOutHostPrm,sizeof(IpcFramesOutLinkRTOS_CreateParams));
+#endif
+    System_linkCreate(ipcFramesInVpssId,&ipcFramesInVpssPrm,sizeof(IpcFramesInLinkRTOS_CreateParams));
+
+    /* Dup link */
+    System_linkCreate(dupId[MJPEG_DUP_LINK_IDX], &dupPrm[MJPEG_DUP_LINK_IDX],
+                      sizeof(dupPrm[MJPEG_DUP_LINK_IDX]));
+
+    System_linkCreate(gVsysModuleContext.muxId, &muxPrm, sizeof(muxPrm));
+
+    /* IPC Links */
+    System_linkCreate(ipcOutVpssId, &ipcOutVpssPrm, sizeof(ipcOutVpssPrm));
+    System_linkCreate(ipcInVideoId, &ipcInVideoPrm, sizeof(ipcInVideoPrm));
+
+    /* Video Encoder Link */
+    System_linkCreate(gVencModuleContext.encId, &encPrm, sizeof(encPrm));
+
+    /* VSTAB link */
+    System_linkCreate(vstabId, &vstabPrm, sizeof(vstabPrm));
+
+    /* IPC Bits Links */
+    System_linkCreate(gVencModuleContext.ipcBitsOutRTOSId, &ipcBitsOutVideoPrm,
+                      sizeof(ipcBitsOutVideoPrm));
+    System_linkCreate(gVencModuleContext.ipcBitsInHLOSId, &ipcBitsInHostPrm0,
+                      sizeof(ipcBitsInHostPrm0));
+
+    /*
+     *  Scaler Dup should formward the frame on outQue 0 (outQueId)
+     *  only when outQue 1 (syncOutQueId) has returned the frame back.
+     */
+    gNoiseFilterMode = gUI_mcfw_config.noisefilterMode;
+	
+    OSA_printf("USECASE SETUP DONE\n");
+}
+
+/* ===================================================================
+ *  @func     MultiCh_deleteTriStreamFullFtr
+ *
+ *  @desc     Function does the following
+ *
+ *  @modif    This function modifies the following structures
+ *
+ *  @inputs   This function takes the following inputs
+ *            <argument name>
+ *            Description of usage
+ *            <argument name>
+ *            Description of usage
+ *
+ *  @outputs  <argument name>
+ *            Description of usage
+ *
+ *  @return   Return value of this function if any
+ *  ==================================================================
+ */
+Void MultiCh_deleteMachVision()
+{
+    UInt32 ipcOutVpssId;
+    UInt32 ipcInVideoId;
+    UInt32 ipcFramesOutVpssId;
+    UInt32 ipcFramesInDspId;
+    UInt32 ipcFramesOutDspId;
+    UInt32 ipcFramesInVpssId;
+    UInt32 dupId[NUM_DUP_LINK];
+    UInt32 vstabId;
+	UInt32 	frameProcessId = SYSTEM_HOST_LINK_ID_FRAMEPROCESS;
+	
+    dupId[MJPEG_DUP_LINK_IDX] = SYSTEM_VPSS_LINK_ID_DUP_1;
+    gVcamModuleContext.sclrId[0] = SYSTEM_LINK_ID_SCLR_INST_0;
+    ipcOutVpssId = SYSTEM_VPSS_LINK_ID_IPC_OUT_M3_0;
+    ipcInVideoId = SYSTEM_VIDEO_LINK_ID_IPC_IN_M3_0;
+    ipcFramesOutVpssId = SYSTEM_VPSS_LINK_ID_IPC_FRAMES_OUT_0;
+    ipcFramesInDspId   = SYSTEM_DSP_LINK_ID_IPC_FRAMES_IN_0;
+    ipcFramesOutDspId = SYSTEM_DSP_LINK_ID_IPC_FRAMES_OUT_0;
+    ipcFramesInVpssId = SYSTEM_VPSS_LINK_ID_IPC_FRAMES_IN_0;
+
+    gVcamModuleContext.ispId = SYSTEM_LINK_ID_ISP_0;
+    vstabId = SYSTEM_LINK_ID_VSTAB_0;
+
+    /* Links Deletion in reverse order from sink to source */
+
+    /* IPC Bits Links */
+    System_linkDelete(gVencModuleContext.ipcBitsOutRTOSId);
+    System_linkDelete(gVencModuleContext.ipcBitsInHLOSId);
+
+    /* VSTAB Link */
+    System_linkDelete(vstabId);
+
+    /* Video Encoder Link */
+    System_linkDelete(gVencModuleContext.encId);
+
+    /* IPC Links */
+    System_linkDelete(ipcOutVpssId);
+    System_linkDelete(ipcInVideoId);
+
+    System_linkDelete(gVsysModuleContext.muxId);
+
+    /* Dup Link */
+    System_linkDelete(dupId[MJPEG_DUP_LINK_IDX]);
+
+    System_linkDelete(ipcFramesInVpssId);
+	System_linkDelete(frameProcessId);
+	System_linkDelete(gVcamModuleContext.ipcFramesInHostId );
+	System_linkDelete(gVdisModuleContext.ipcFramesOutHostId);	
+    System_linkDelete(ipcFramesOutDspId);
+    System_linkDelete(gVsysModuleContext.dspImgId);
+    System_linkDelete(ipcFramesInDspId);
+    System_linkDelete(ipcFramesOutVpssId);
+
+    System_linkDelete(gVcamModuleContext.vnfId);
+    
+
+    /* Camera Link */
+    System_linkDelete(gVcamModuleContext.cameraId);
+
+    OSA_printf("USECASE TEARDOWN DONE\n");
+}
+

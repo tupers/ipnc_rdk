@@ -1,0 +1,11 @@
+detect_20170831:
+	
+
+detect_20170907:
+	erzhihua quyu gaibian
+	tuxiang shangxia bianjie canshu
+
+detect_20170908:
+	modify vertical line and horizonal line rect detect
+	add long block compasate
+

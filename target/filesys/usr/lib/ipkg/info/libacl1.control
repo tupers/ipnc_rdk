@@ -1,0 +1,13 @@
+Package: libacl1
+Version: 2.2.49-r5.6
+Description: Commands for Manipulating POSIX Access Control Lists
+Section: base
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: GPLv2
+Architecture: armv7a
+OE: acl
+Homepage: unknown
+Build: master/9e4a18d
+Depends: libattr1 (>= 2.4.44), libc6 (>= 2.12.2)
+Source: http://download.savannah.gnu.org/releases/acl/acl-2.2.49.src.tar.gz file://nolargefile.patch

@@ -1,0 +1,12 @@
+Package: angstrom-version
+Version: 1:2011.09-r7.6
+Description: Version 2011.09-r7 of package angstrom-version
+Section: base
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: MIT
+Architecture: dm814x-evm
+OE: angstrom-version
+Homepage: unknown
+Build: master/9e4a18d
+Source: file://lsb_release

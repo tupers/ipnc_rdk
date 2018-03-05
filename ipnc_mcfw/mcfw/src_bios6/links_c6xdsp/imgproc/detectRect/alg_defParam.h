@@ -1,0 +1,33 @@
+#ifndef ALG_DEFPARAM_H
+#define ALG_DEFPARAM_H
+
+#define SENSOR_RADIUS			(3.75)
+#define DEF_FOCALLEN			(8.71)	
+#define DEF_LEFTRATIO			(0.125)
+#define DEF_RIGHTRATIO			(0.875)
+#define DEF_TOPRATIO			(0.125)
+#define DEF_BOTTOMRATIO			(0.875)
+#define DEF_ROIRATIO			(0.4)
+#define DEF_LONGBLOCKOFFSET		(20)
+#define DEF_LVERTICALOFFSET		(20)
+#define DEF_SHORTBLOCKOFFSET	(5)
+#define DEF_IMGWIDTH			1280
+#define DEF_IMGHEIGHT			720
+#define DEF_MAXAREA			3000
+#define DEF_MINAREA			50
+#define DEF_MCONST			1
+#define DEF_ACONST			0
+#define DEF_POSMCONST			1
+#define DEF_POSACONST			0
+#define DEF_ISDETECTSIMILARITY		0
+#define DEF_RECTSIMILARITY		(0.6)
+#define DEF_DETECTROWNUM		3
+
+#define MORPH_MASK_WIDTH		101
+#define MORPH_MASK_HEIGHT		1
+
+
+
+#define DEF_VERTICALLINE_CNT		3
+
+#endif

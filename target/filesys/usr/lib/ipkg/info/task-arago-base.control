@@ -1,0 +1,13 @@
+Package: task-arago-base
+Version: 1.0-r12.6
+Description: Basic task to get a device booting
+Section: base
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: MIT
+Architecture: all
+OE: task-arago-base
+Homepage: unknown
+Build: master/9e4a18d
+Depends: base-files, base-passwd, busybox, initscripts, modutils-initscripts, netbase, update-alternatives, module-init-tools, alsa-lib, alsa-utils-aplay, mtd-utils, curl, arago-feed-configs, initscript-telnetd, devmem2, ethtool
+Source: file:///home/wenchi/software/workdir/oe/arago/recipes/tasks/task-arago-base.bb

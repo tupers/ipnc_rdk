@@ -1,0 +1,17 @@
+Assume that the location of toolchain is /home/extra/arm-2009q1/bin/arm-none-linux-gnueabi-*
+
+1. Add toolchain location to $PATH, if not yet
+
+export PATH=/home/extra/arm-2009q1/bin:$PATH
+
+2. Configure the build parameter
+
+./configure --prefix=/usr/local/libupnp --host=arm-none-linux-gnueabi --disable-tools --disable-client --disable-samples --disable-webserver --disable-optssdp --disable-soap --disable-gena
+
+	--prefix is where you want the headers & libraries to be install
+
+3. make;make install
+
+4. copy the folder include/ and lib/ in /usr/local/libupnp to the folder ipnc_app/network/ScanIP_Upnp
+
+5. Go to ipnc_app/network/ScanIP_Upnp, do make clean;make;make install

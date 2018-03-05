@@ -1,0 +1,13 @@
+#!/bin/sh
+	if test "x$D" != "x"; then
+		OPT="-r $D"
+	else
+		OPT="-s"
+	fi
+	update-rc.d $OPT udev-cache start 12 S .
+if test "x$D" != "x"; then
+	OPT="-r $D"
+else
+	OPT="-s"
+fi
+update-rc.d $OPT udev start 03 S .

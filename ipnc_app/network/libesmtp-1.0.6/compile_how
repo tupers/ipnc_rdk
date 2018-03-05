@@ -1,0 +1,20 @@
+Assume that the location of toolchain is /home/extra/arm-2009q1/bin/arm-none-linux-gnueabi-*
+
+1. Add toolchain location to $PATH, if not yet
+
+export PATH=/home/extra/arm-2009q1/bin:$PATH
+
+2. Configure the build parameter
+
+./configure --prefix=/usr/local/libesmtp --with-auth-plugin-dir=/usr/lib/esmtp-plugins --host=arm-none-linux-gnueabi --enable-ntlm --with-openssl=/usr/local/openssl
+
+	--prefix is where you want the headers & libraries to be install
+	--with-auth-plugin-dir is where you want the plugins to be install
+			the plugins need to be in the same path in the target filesys
+
+3. make;make install
+
+4. copy the generated libraries & plugins to target file system
+cp -a /usr/lib/esmtp-plugins /path/to/target/filesys/usr/lib/
+cp -a /usr/local/libesmtp/lib/libesmtp.so* /path/to/target/filesys/usr/lib/
+

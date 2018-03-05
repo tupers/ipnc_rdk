@@ -1,0 +1,13 @@
+Package: initscript-telnetd
+Version: 1.0-r2.6
+Description: Initscripts for telnetd
+Section: base
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: MIT
+Architecture: armv7a
+OE: initscript-telnetd
+Homepage: unknown
+Build: master/9e4a18d
+Depends: update-rc.d
+Source: file://telnetd

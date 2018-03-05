@@ -1,0 +1,79 @@
+Assume that the location of toolchain is /home/extra/arm-2009q1/bin/arm-none-linux-gnueabi-*
+
+Before following steps, add toolchain path to $PATH, if not yet
+# export PATH=/home/extra/arm-2009q1/bin:$PATH
+
+1. configure libdaemon and expat like: 
+	./configure --host=arm-none-linux-gnueabi --prefix=/usr --sysconfdir=/etc --localstatedir=/var ac_cv_func_setpgrp_void=yes
+
+2. Build libdaemon and expat like: 
+	make 
+	
+3. Stage/install libdaemon and expat like: 
+	
+	make DESTDIR=/home/user/workdir/DM385_IPNC/ipnc_rdk/ipnc_app/network/zeroconfig/avahi/avahi_require install
+	rm -rf /home/user/workdir/DM385_IPNC/ipnc_rdk/ipnc_app/network/zeroconfig/avahi/avahi_require/usr/lib/*.la
+	make DESTDIR=/home/user/workdir/DM385_IPNC/ipnc_rdk/target/filesys/ install
+	
+4. Configure avahi like: 
+
+	./configure --host=arm-none-linux-gnueabi CPPFLAGS="-fno-stack-protector -I/home/user/workdir/DM385_IPNC/ipnc_rdk/ipnc_app/network/zeroconfig/avahi/avahi_require/usr/include" LDFLAGS="-L/home/user/workdir/DM385_IPNC/ipnc_rdk/ipnc_app/network/zeroconfig/avahi/avahi_require/usr/lib" --disable-dbus --disable-gdbm --disable-glib --disable-gobject --disable-gtk --disable-gtk3 --disable-manpages --disable-monodoc --disable-python --disable-qt3 --disable-qt4 --enable-libdaemon --with-distro=none --with-xml=expat --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-stack-protector LIBDAEMON_CFLAGS="-I/home/user/workdir/DM385_IPNC/ipnc_rdk/ipnc_app/network/zeroconfig/avahi/avahi_require/usr/include " LIBDAEMON_LIBS="-L/home/user/workdir/DM385_IPNC/ipnc_rdk/ipnc_app/network/zeroconfig/avahi/avahi_require/usr/lib -ldaemon"
+	
+	make DESTDIR=/home/user/workdir/DM385_IPNC/ipnc_rdk/target/filesys/ install
+	make DESTDIR=/home/user/workdir/DM385_IPNC/ipnc_rdk/target/filesys/ install-data
+	make DESTDIR=/home/user/workdir/DM385_IPNC/ipnc_rdk/target/filesys/ install-exec
+	
+	
+5. add user and group on IPNC 
+NOTE: It would modify folder /etc, so you must run on NFS , because cramfs is read-only)
+
+	addgroup  avahi
+	addgroup  avahi-autoipd
+	
+	adduser  -G avahi -S -H avahi
+	adduser  -G avahi-autoipd -S -H avahi-autoipd
+	
+6. 
+-add http.service on /etc/avahi/service/ and the content as below
+
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name>DM8127_IPNC_TEST</name> ## Name of the Bookmark
+  <service>
+    <type>_http._tcp</type>
+    <port>80</port>
+    <txt-record>path=/</txt-record> ## Path 
+  </service>
+</service-group>
+
+-add psia.service on /etc/avahi/service/ and the content as below
+
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name>DM8127_IPNC_TEST</name> ## Name of the Bookmark
+  <service>
+    <type>_psia._tcp</type>
+    <port>80</port>
+    <txt-record>path=/</txt-record> ## Path 
+  </service>
+</service-group>
+
+
+
+7. add below command to the /etc/fstab on IPNC
+	none		/var/lib	tmpfs	defaults		0 0
+	
+8. add avahi command to the /opt/ipnc/autorun.sh on IPNC
+	/usr/sbin/avahi-autoipd --no-drop-root --no-chroot -D eth0
+	/usr/sbin/avahi-daemon --no-drop-root -D
+	/usr/sbin/avahi-dnsconfd -D
+	
+9. Package the cramfs and boot IPNC
+
+
+
+	
+	
+

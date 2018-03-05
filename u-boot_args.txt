@@ -1,0 +1,54 @@
+Nand启动：
+bootcmd设置：
+	setenv bootcmd 'ipnc_ff_init 1;nboot 0x81000000 0 0x280000; bootm'
+	setenv bootcmd 'ipnc_ff_init 1;tftp 0x81000000 uImage; bootm'
+
+bootargs（ubifs）：
+	setenv bootargs 'console=ttyO0,115200n8 rootwait=1 rw ubi.mtd=4,2048 rootfstype=ubifs root=ubi0:rootfs init=/init mem=80M vram=4M notifyk.vpssm3_sva=0xBFD00000 ip=192.168.1.224 eth=$(ethaddr) cmemk.phys_start=0x85000000 cmemk.phys_end=0x89000000 cmemk.allowOverlap=1 earlyprintk'
+
+	setenv bootargs 'console=ttyO0,115200n8 rootwait=1 rw ubi.mtd=4,2048 rootfstype=ubifs root=ubi0:rootfs init=/init mem=80M vram=4M notifyk.vpssm3_sva=0xBFD00000 ip=192.168.1.220 eth=$(ethaddr) cmemk.phys_start=0x85000000 cmemk.phys_end=0x89000000 cmemk.allowOverlap=1 earlyprintk'
+
+
+	setenv bootargs 'console=ttyO0,115200n8 rootwait=1 rw ubi.mtd=4,2048 rootfstype=ubifs root=ubi0:rootfs init=/init mem=80M vram=4M notifyk.vpssm3_sva=0xBFD00000 ip=192.168.1.224 cmemk.phys_start=0x85000000 cmemk.phys_end=0x89000000 cmemk.allowOverlap=1 earlyprintk'		
+
+bootargs（nfs）：
+	setenv bootargs 'console=ttyO0,115200n8 root=/dev/nfs rw mem=80M ddr_mem=2048M vram=4M notifyk.vpssm3_sva=0xBFD00000 nfsroot=192.168.1.61:/opt/workspace/sds/software/Source/ipnc_rdk/target/filesys,nolock eth=00:0C:0C:A0:07:66 ip=192.168.1.224 cmemk.phys_start=0x85000000 cmemk.phys_end=0x89000000 cmemk.allowOverlap=1 earlyprintk';
+
+setenv bootargs 'console=ttyO0,115200n8 root=/dev/nfs rw mem=80M ddr_mem=2048M vram=4M notifyk.vpssm3_sva=0xBFD00000 nfsroot=192.168.1.61:/opt/workspace/EzCam/Source/ipnc_rdk/target/filesys,nolock eth=00:0C:0C:A0:07:66 ip=192.168.1.224 cmemk.phys_start=0x85000000 cmemk.phys_end=0x89000000 cmemk.allowOverlap=1 earlyprintk';
+	setenv bootargs 'console=ttyO0,115200n8 root=/dev/nfs rw mem=80M ddr_mem=2048M vram=4M notifyk.vpssm3_sva=0xBFD00000 nfsroot=192.168.1.61:/opt/workspace/sds/software/Source/ipnc_rdk/target/filesys,nolock eth=00:0C:0C:A0:07:66 ip=192.168.1.220 cmemk.phys_start=0x85000000 cmemk.phys_end=0x89000000 cmemk.allowOverlap=1 earlyprintk';
+uboot网络环境变量设置：
+	setenv ipaddr 192.168.1.224;setenv gatewayip 192.168.1.1;setenv netmask 255.255.255.0;setenv serverip 192.168.1.61
+
+mount -t nfs -o nolock 192.168.1.61:/nfs /mnt/nfs
+
+mw.b 0x81000000 0xFF 0x20000
+tftp 0x81000000 u-boot.min.nand
+tftp 0x81000000 /tftpboot/u-boot.min.nand
+nand write.i 0x81000000 0x0 0x20000
+
+mw.b 0x81000000 0xFF 0x40000
+tftp 0x81000000 u-boot.bin
+tftp 0x81000000 /tftpboot/u-boot.bin
+nand erase 0x20000 0x60000
+nand write.i 0x81000000 0x20000 0x60000
+
+tftp 0x81000000 uImage
+tftp 0x81000000 /tftpboot/uImage
+nand erase 0x00280000 0x00300000
+nand write.i 0x81000000 0x00280000 0x300000
+
+
+
+nand scrub 0x006C0000 0xB940000
+mw.b 0x81000000 0xFF 0x5000000
+tftp 0x81000000 /tftpboot/ubifs_ipnc.bin
+tftp 0x81000000 ubifs_ipnc.bin
+nand erase 0x006C0000 0xB940000
+nand write 0x81000000 0x006C0000 0x5000000
+
+
+
+telnet 192.168.1.224
+mount -t nfs 192.168.1.61:/home/tupers/nfs /mnt/nfs
+cp /mnt/nfs/xxx /path
+

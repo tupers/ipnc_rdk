@@ -1,0 +1,12 @@
+Package: libc6
+Version: 2.12.2-r10.6
+Description: Version 1.0-r10 of package external-toolchain-arago
+Section: base
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: LGPLv2.1+
+Architecture: armv7a
+OE: external-toolchain-arago
+Homepage: unknown
+Build: master/9e4a18d
+Source: file://SUPPORTED

@@ -1,0 +1,13 @@
+Package: devmem2
+Version: 1.0-r7.6
+Description: Simple program to read/write from/to any location in memory.
+Section: base
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: GPLv2
+Architecture: armv7a
+OE: devmem2
+Homepage: unknown
+Build: master/9e4a18d
+Depends: libc6 (>= 2.12.2)
+Source: http://www.lartmaker.nl/lartware/port/devmem2.c file://devmem2-fixups-2.patch;apply=yes;striplevel=0

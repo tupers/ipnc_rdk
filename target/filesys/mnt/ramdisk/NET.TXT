@@ -1,0 +1,9 @@
+LocalIP="192.168.1.224"
+NetMask="255.255.255.0"
+Gateway="192.168.1.254"
+DNS="192.168.1.1"
+HTTPPort=80
+DHCPConfig=0
+DHCPEnable=0
+Title="TI_IPNC"
+MAC="00:0c:0c:a0:07:66"

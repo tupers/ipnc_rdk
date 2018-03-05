@@ -1,0 +1,19 @@
+Assume that the location of toolchain is /home/extra/arm-2009q1/bin/arm-none-linux-gnueabi-*
+
+1. Add toolchain location to $PATH, if not yet
+
+export PATH=/home/extra/arm-2009q1/bin:$PATH
+
+2. Configure the build parameter
+
+./configure --prefix=/usr/local/esmtp --host=arm-none-linux-gnueabi --with-libesmtp=/usr/local/libesmtp CPPFLAGS="-I/usr/local/openssl/include" LDFLAGS="-L/usr/local/openssl/lib"
+
+	--with-libesmtp is the install path you specified during libesmtp building process
+
+3. make
+	**NO need to run 'make install', all we need is the file 'esmtp'
+
+4. copy esmtp to ipnc_app/network/esmtp/
+cp esmtp ../esmtp/
+
+5. Go to ipnc_app/network/esmtp/, do make clean;make;make install

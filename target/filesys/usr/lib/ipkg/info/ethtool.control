@@ -1,0 +1,13 @@
+Package: ethtool
+Version: 2.6.35-r1-arago1.6
+Description: A small utility for examining and tuning the settings of your ethernet-based network interfaces.
+Section: console/network
+Priority: optional
+Maintainer: Arago Developers <arago-devel@gforge.ti.com>
+License: GPLv2
+Architecture: armv7a
+OE: ethtool
+Homepage: http://sourceforge.net/projects/gkernel/
+Build: master/9e4a18d
+Depends: libc6 (>= 2.12.2)
+Source: http://downloads.sourceforge.net/gkernel/ethtool-2.6.35.tar.gz file://fifo.patch

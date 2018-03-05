@@ -1,0 +1,32 @@
+This text file shows examples about how to cross-compile esmtp and its related libraries.
+You only have to do this if you want to upgrade the libraries to newer versions.
+
+Assume that the location of toolchain is /home/extra/arm-2009q1/bin/arm-none-linux-gnueabi-*
+
+1. Before following steps, add toolchain path to $PATH, if not yet
+# export PATH=/home/extra/arm-2009q1/bin:$PATH
+
+
+2. OpenSSL:
+# cd openssl-1.0.1
+# ./Configure --openssldir=/usr/local/openssl linux-armv4 no-shared --cross-compile-prefix=arm-none-linux-gnueabi-
+# make
+# make install
+
+
+3. libesmtp:
+# cd libesmtp-1.0.6
+# ./configure --prefix=/usr/local/libesmtp --with-auth-plugin-dir=/usr/lib/esmtp-plugins --host=arm-none-linux-gnueabi --enable-ntlm --with-openssl=/usr/local/openssl
+# make
+# make install
+	 copy the generated libraries to target file system
+# cp -a /usr/lib/esmtp-plugins /path/to/target/filesys/usr/lib/
+# cp -a /usr/local/libesmtp/lib/libesmtp.so* /path/to/target/filesys/usr/lib/
+
+
+4. esmtp:
+# cd esmtp-1.2
+# ./configure --prefix=/usr/local/esmtp --host=arm-none-linux-gnueabi --with-libesmtp=/usr/local/libesmtp CPPFLAGS="-I/usr/local/openssl/include" LDFLAGS="-L/usr/local/openssl/lib"
+# make
+	copy esmtp to ipnc_app/network/esmtp/
+# cp esmtp ../esmtp/
